@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CodeScribe - Code to Markdown Generator</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        color: #333;
+        background-color: #f5f5f5;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .header {
+        background-color: #4a76a8;
+        color: white;
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 1.4rem;
+      }
+      .tab-container {
+        display: flex;
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #ddd;
+      }
+      .tab {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-right: 1px solid #ddd;
+      }
+      .tab.active {
+        background-color: white;
+        border-bottom: 2px solid #4a76a8;
+      }
+      .main-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+      .file-tree {
+        width: 300px;
+        overflow: auto;
+        border-right: 1px solid #ddd;
+        background: white;
+        padding: 15px;
+        display: none;
+      }
+      .tree-item {
+        margin: 5px 0;
+      }
+      .tree-children {
+        margin-left: 20px;
+      }
+      .directory > .tree-item-header {
+        font-weight: bold;
+      }
+      .tree-item-header {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+      }
+      .tree-toggle {
+        margin-right: 5px;
+        width: 16px;
+        text-align: center;
+      }
+      .settings-container {
+        padding: 20px;
+        background-color: white;
+        flex: 1;
+        overflow: auto;
+        display: none;
+      }
+      .button-container {
+        display: flex;
+        gap: 10px;
+        padding: 10px 20px;
+        background-color: white;
+        border-bottom: 1px solid #ddd;
+      }
+      button {
+        padding: 8px 16px;
+        background-color: #4a76a8;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #3a5c84;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background-color: white;
+      }
+      #textArea {
+        flex: 1;
+        padding: 10px;
+        font-family: "Courier New", monospace;
+        border: none;
+        resize: none;
+        background-color: white;
+        overflow: auto;
+      }
+      .progress-container {
+        margin: 10px 20px;
+        display: none;
+      }
+      .progress {
+        width: 100%;
+        height: 20px;
+        background-color: #e0e0e0;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .progress-bar {
+        height: 100%;
+        background-color: #4caf50;
+        width: 0%;
+        transition: width 0.3s;
+      }
+      .progress-text {
+        margin-top: 5px;
+        font-size: 14px;
+        text-align: center;
+      }
+      .stats-container {
+        background-color: #f9f9f9;
+        padding: 10px 20px;
+        border-top: 1px solid #ddd;
+        font-size: 0.9rem;
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .stats-item {
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+      }
+      .stats-title {
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #4a76a8;
+      }
+      .status {
+        padding: 10px 20px;
+        font-size: 14px;
+        font-style: italic;
+        color: #666;
+        border-top: 1px solid #ddd;
+      }
+      .settings-group {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .settings-title {
+        font-weight: bold;
+        margin-bottom: 10px;
+        font-size: 1.1rem;
+      }
+      .settings-description {
+        margin-bottom: 15px;
+        color: #666;
+      }
+      #ignorePatterns {
+        width: 100%;
+        min-height: 100px;
+        font-family: monospace;
+      }
+      .hidden {
+        display: none;
+      }
+      .visible {
+        display: block;
+      }
+      .api-key-input {
+        width: 100%;
+        padding: 8px;
+        font-family: monospace;
+        margin-top: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .toast-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      .toast {
+        background-color: #4caf50;
+        color: white;
+        padding: 15px 25px;
+        border-radius: 4px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        margin-top: 10px;
+        animation: slideIn 0.3s, fadeOut 0.5s 2.5s forwards;
+        display: flex;
+        align-items: center;
+      }
+      .toast.error {
+        background-color: #f44336;
+      }
+      .toast-icon {
+        margin-right: 10px;
+        font-size: 1.2rem;
+      }
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+          visibility: hidden;
+        }
+      }
+      .settings-saved-highlight {
+        animation: highlightGreen 1s;
+      }
+      @keyframes highlightGreen {
+        0% {
+          background-color: transparent;
+        }
+        30% {
+          background-color: rgba(76, 175, 80, 0.2);
+        }
+        100% {
+          background-color: transparent;
+        }
+      }
+      .copy-highlight {
+        animation: highlightCopy 1s;
+      }
+      @keyframes highlightCopy {
+        0% {
+          background-color: #ffffff;
+        }
+        30% {
+          background-color: #e3f2fd;
+        }
+        100% {
+          background-color: #ffffff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>CodeScribe</h1>
+      <div style="font-size: 0.8rem; opacity: 0.9">
+        Code to Markdown Generator
+      </div>
+    </div>
+
+    <div class="tab-container">
+      <div class="tab active" data-tab="generator">Generator</div>
+      <div class="tab" data-tab="settings">Settings</div>
+    </div>
+
+    <div class="main-container">
+      <!-- Generator Tab Content -->
+      <div class="file-tree" id="fileTree"></div>
+
+      <div class="content" id="generatorContent">
+        <div class="button-container">
+          <button id="selectFolderBtn">Select Folder</button>
+          <button id="generateBtn" disabled>Generate Markdown</button>
+          <button id="saveBtn" disabled>Save Markdown</button>
+          <button id="copyBtn" disabled>Copy to Clipboard</button>
+          <button id="toggleFileTreeBtn" disabled>Show/Hide Files</button>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+          <div class="progress">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <div class="progress-text" id="progressText">0%</div>
+        </div>
+
+        <textarea id="textArea" readonly></textarea>
+
+        <div class="stats-container">
+          <div class="stats-grid">
+            <div class="stats-item">
+              <div class="stats-title">Characters</div>
+              <div id="charCount">0</div>
+            </div>
+            <div class="stats-item">
+              <div class="stats-title">OpenAI Tokens (GPT-4o)</div>
+              <div id="openaiTokens">0</div>
+            </div>
+            <div class="stats-item">
+              <div class="stats-title">Claude Tokens</div>
+              <div id="claudeTokens">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="status" id="statusText"></div>
+      </div>
+
+      <!-- Settings Tab Content -->
+      <div class="settings-container" id="settingsContent">
+        <div class="settings-group">
+          <div class="settings-title">Ignore Patterns</div>
+          <div class="settings-description">
+            Specify files and folders to ignore during markdown generation. Each
+            pattern should be on a new line. You can use '*' as a wildcard.
+          </div>
+          <textarea id="ignorePatterns"></textarea>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-title">API Keys</div>
+          <div class="settings-description">
+            Enter your API keys for more accurate token counting. These are
+            stored locally and never sent to any server.
+          </div>
+          <div style="margin-bottom: 15px">
+            <label for="anthropicApiKey"
+              >Anthropic API Key (for Claude token counting):</label
+            >
+            <input
+              type="password"
+              id="anthropicApiKey"
+              class="api-key-input"
+              placeholder="sk-ant-..."
+            />
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-title">API Server</div>
+          <div class="settings-description">
+            Configure the API server to allow external applications to generate
+            markdown.
+          </div>
+          <div style="margin-bottom: 15px; display: flex; align-items: center">
+            <input
+              type="checkbox"
+              id="apiServerEnabled"
+              style="margin-right: 10px"
+            />
+            <label for="apiServerEnabled">Enable API server</label>
+          </div>
+          <div style="margin-bottom: 15px">
+            <label for="apiServerPort">Port:</label>
+            <input
+              type="number"
+              id="apiServerPort"
+              class="api-key-input"
+              placeholder="69420"
+              min="1024"
+              max="65535"
+            />
+          </div>
+          <div
+            id="apiServerStatus"
+            style="font-size: 0.9em; color: #666; margin-top: 10px"
+          >
+            Status: Not running
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-title">MCP Server</div>
+          <div class="settings-description">
+            Enable the Model Context Protocol server for AI assistants
+            integration.
+          </div>
+          <div style="margin-bottom: 15px; display: flex; align-items: center">
+            <input
+              type="checkbox"
+              id="mcpServerEnabled"
+              style="margin-right: 10px"
+            />
+            <label for="mcpServerEnabled">Enable MCP server</label>
+          </div>
+          <div
+            id="mcpServerStatus"
+            style="font-size: 0.9em; color: #666; margin-top: 10px"
+          >
+            Status: Not running
+          </div>
+        </div>
+
+        <div class="button-container">
+          <button id="saveSettingsBtn">Save Settings</button>
+          <button id="resetSettingsBtn">Reset to Defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+      // Add this line near the top of the script section, right after the other imports
+      const path = require("path");
+
+      // Import required modules
+      const { ipcRenderer } = require("electron");
+
+      // Import token counter module
+      const tokenCounters = require("./tokenCounters");
+
+      // DOM Elements
+      const selectFolderBtn = document.getElementById("selectFolderBtn");
+      const generateBtn = document.getElementById("generateBtn");
+      const saveBtn = document.getElementById("saveBtn");
+      const copyBtn = document.getElementById("copyBtn");
+      const toggleFileTreeBtn = document.getElementById("toggleFileTreeBtn");
+      const textArea = document.getElementById("textArea");
+      const progressContainer = document.getElementById("progressContainer");
+      const progressBar = document.getElementById("progressBar");
+      const progressText = document.getElementById("progressText");
+      const statusText = document.getElementById("statusText");
+      const fileTree = document.getElementById("fileTree");
+      const ignorePatterns = document.getElementById("ignorePatterns");
+      const saveSettingsBtn = document.getElementById("saveSettingsBtn");
+      const resetSettingsBtn = document.getElementById("resetSettingsBtn");
+      const charCount = document.getElementById("charCount");
+      const openaiTokens = document.getElementById("openaiTokens");
+      const claudeTokens = document.getElementById("claudeTokens");
+      const apiServerEnabled = document.getElementById("apiServerEnabled");
+      const apiServerPort = document.getElementById("apiServerPort");
+      const apiServerStatus = document.getElementById("apiServerStatus");
+      const mcpServerEnabled = document.getElementById("mcpServerEnabled");
+      const mcpServerStatus = document.getElementById("mcpServerStatus");
+
+      // Tab elements
+      const tabs = document.querySelectorAll(".tab");
+      const generatorContent = document.getElementById("generatorContent");
+      const settingsContent = document.getElementById("settingsContent");
+
+      let folderPath = "";
+      let markdownContent = "";
+      let directoryStructure = null;
+      let settings = null;
+      let selectedFiles = [];
+
+      // Function to show toast notifications
+      function showToast(message, isError = false) {
+        const toast = document.createElement("div");
+        toast.className = isError ? "toast error" : "toast";
+
+        const icon = document.createElement("span");
+        icon.className = "toast-icon";
+        icon.textContent = isError ? "✖" : "✓";
+        toast.appendChild(icon);
+
+        const text = document.createElement("span");
+        text.textContent = message;
+        toast.appendChild(text);
+
+        const container = document.getElementById("toastContainer");
+        container.appendChild(toast);
+
+        // Remove toast after animation completes
+        setTimeout(() => {
+          toast.remove();
+        }, 3000);
+      }
+
+      // Function to highlight saved settings groups
+      function highlightSavedSettings() {
+        const settingsGroups = document.querySelectorAll(".settings-group");
+        settingsGroups.forEach((group) => {
+          group.classList.add("settings-saved-highlight");
+
+          // Remove the class after animation completes
+          setTimeout(() => {
+            group.classList.remove("settings-saved-highlight");
+          }, 1000);
+        });
+      }
+
+      // Load settings on startup
+      async function loadSettings() {
+        settings = await ipcRenderer.invoke("get-settings");
+        if (settings && settings.ignorePatterns) {
+          ignorePatterns.value = settings.ignorePatterns.join("\n");
+        }
+        if (settings && settings.anthropicApiKey) {
+          document.getElementById("anthropicApiKey").value =
+            settings.anthropicApiKey;
+        }
+        if (settings) {
+          apiServerEnabled.checked = !!settings.apiServerEnabled;
+          apiServerPort.value = settings.apiServerPort || 69420;
+          mcpServerEnabled.checked = !!settings.mcpServerEnabled;
+        }
+
+        // Get server status
+        updateServerStatus();
+      }
+      loadSettings();
+
+      // Update server status
+      async function updateServerStatus() {
+        try {
+          // Get API server status
+          const apiStatus = await ipcRenderer.invoke("get-api-server-status");
+          if (apiStatus.running) {
+            apiServerStatus.textContent = `Status: Running on port ${apiStatus.port}`;
+            apiServerStatus.style.color = "#4caf50";
+          } else {
+            apiServerStatus.textContent = "Status: Not running";
+            apiServerStatus.style.color = "#666";
+          }
+
+          // Get MCP server status
+          const mcpStatus = await ipcRenderer.invoke("get-mcp-server-status");
+          if (mcpStatus.running) {
+            mcpServerStatus.textContent = "Status: Running";
+            mcpServerStatus.style.color = "#4caf50";
+          } else {
+            mcpServerStatus.textContent = "Status: Not running";
+            mcpServerStatus.style.color = "#666";
+          }
+        } catch (error) {
+          console.error("Error getting server status:", error);
+        }
+      }
+
+      // Update status periodically
+      setInterval(updateServerStatus, 5000);
+
+      // Listen for server status updates
+      ipcRenderer.on("api-server-status", (event, status) => {
+        if (status.running) {
+          apiServerStatus.textContent = `Status: Running on port ${status.port}`;
+          apiServerStatus.style.color = "#4caf50";
+        } else {
+          apiServerStatus.textContent = status.error
+            ? `Status: Error - ${status.error}`
+            : "Status: Not running";
+          apiServerStatus.style.color = status.error ? "#f44336" : "#666";
+        }
+      });
+
+      ipcRenderer.on("mcp-server-status", (event, status) => {
+        if (status.running) {
+          mcpServerStatus.textContent = "Status: Running";
+          mcpServerStatus.style.color = "#4caf50";
+        } else {
+          mcpServerStatus.textContent = status.error
+            ? `Status: Error - ${status.error}`
+            : "Status: Not running";
+          mcpServerStatus.style.color = status.error ? "#f44336" : "#666";
+        }
+      });
+
+      // Show notification when MCP CLI is started
+      ipcRenderer.on("mcp-cli-started", () => {
+        showToast("MCP CLI tool started");
+      });
+
+      // Tab switching
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          // Remove active class from all tabs
+          tabs.forEach((t) => t.classList.remove("active"));
+          // Add active class to clicked tab
+          tab.classList.add("active");
+
+          // Hide all content
+          generatorContent.style.display = "none";
+          settingsContent.style.display = "none";
+
+          // Show content based on tab
+          const tabId = tab.getAttribute("data-tab");
+          if (tabId === "generator") {
+            generatorContent.style.display = "flex";
+          } else if (tabId === "settings") {
+            settingsContent.style.display = "block";
+          }
+        });
+      });
+
+      // Initialize tabs
+      generatorContent.style.display = "flex";
+      settingsContent.style.display = "none";
+
+      // Toggle file tree
+      toggleFileTreeBtn.addEventListener("click", () => {
+        if (
+          fileTree.style.display === "none" ||
+          fileTree.style.display === ""
+        ) {
+          fileTree.style.display = "block";
+        } else {
+          fileTree.style.display = "none";
+        }
+      });
+
+      // Select folder button
+      selectFolderBtn.addEventListener("click", async () => {
+        folderPath = await ipcRenderer.invoke("select-folder");
+        if (folderPath) {
+          statusText.textContent = `Selected folder: ${folderPath}`;
+          generateBtn.disabled = false;
+          toggleFileTreeBtn.disabled = false;
+
+          // Show toast notification
+          showToast(`Folder selected: ${path.basename(folderPath)}`);
+
+          // Load directory structure for file tree
+          directoryStructure = await ipcRenderer.invoke(
+            "get-directory-structure",
+            folderPath
+          );
+          renderFileTree(directoryStructure);
+          fileTree.style.display = "block";
+        }
+      });
+
+      // Create file tree with checkboxes
+      function renderFileTree(structure) {
+        fileTree.innerHTML = "";
+
+        function createTreeItem(item) {
+          const itemElement = document.createElement("div");
+          itemElement.className = `tree-item ${item.type}`;
+
+          const header = document.createElement("div");
+          header.className = "tree-item-header";
+
+          // Add toggle for directories
+          const toggle = document.createElement("span");
+          toggle.className = "tree-toggle";
+          toggle.textContent = item.type === "directory" ? "▶" : "";
+          header.appendChild(toggle);
+
+          // Add checkbox
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = item.selected;
+          checkbox.addEventListener("change", () => {
+            item.selected = checkbox.checked;
+
+            // If it's a directory, select/deselect all children
+            if (item.children) {
+              toggleChildCheckboxes(childrenContainer, checkbox.checked);
+              updateItemSelection(item, checkbox.checked);
+            }
+
+            // Update the selected files list
+            updateSelectedFiles();
+          });
+          header.appendChild(checkbox);
+
+          // Add label
+          const label = document.createElement("span");
+          label.textContent = item.name;
+          header.appendChild(label);
+
+          itemElement.appendChild(header);
+
+          // Add children container for directories
+          if (item.type === "directory" && item.children) {
+            const childrenContainer = document.createElement("div");
+            childrenContainer.className = "tree-children";
+            childrenContainer.style.display = "none";
+
+            item.children.forEach((child) => {
+              childrenContainer.appendChild(createTreeItem(child));
+            });
+
+            itemElement.appendChild(childrenContainer);
+
+            // Toggle children display when clicking the header
+            toggle.addEventListener("click", () => {
+              if (childrenContainer.style.display === "none") {
+                childrenContainer.style.display = "block";
+                toggle.textContent = "▼";
+              } else {
+                childrenContainer.style.display = "none";
+                toggle.textContent = "▶";
+              }
+            });
+          }
+
+          return itemElement;
+        }
+
+        fileTree.appendChild(createTreeItem(structure));
+        updateSelectedFiles();
+      }
+
+      // Update selected state for all children
+      function updateItemSelection(item, selected) {
+        if (item.children) {
+          item.children.forEach((child) => {
+            child.selected = selected;
+            updateItemSelection(child, selected);
+          });
+        }
+      }
+
+      // Toggle all child checkboxes
+      function toggleChildCheckboxes(container, checked) {
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach((checkbox) => {
+          checkbox.checked = checked;
+        });
+      }
+
+      // Update the list of selected files
+      function updateSelectedFiles() {
+        selectedFiles = [];
+
+        function collectSelectedFiles(item) {
+          if (item.selected) {
+            if (item.type === "file") {
+              selectedFiles.push(item.path);
+            } else if (item.children) {
+              item.children.forEach(collectSelectedFiles);
+            }
+          }
+        }
+
+        if (directoryStructure) {
+          collectSelectedFiles(directoryStructure);
+        }
+
+        // Enable/disable generate button based on selection
+        generateBtn.disabled = selectedFiles.length === 0;
+      }
+
+      // Generate markdown button
+      generateBtn.addEventListener("click", async () => {
+        if (!folderPath || selectedFiles.length === 0) {
+          statusText.textContent =
+            "Please select a folder and at least one file";
+          return;
+        }
+
+        // Show progress bar
+        progressContainer.style.display = "block";
+        progressBar.style.width = "0%";
+        progressText.textContent = "0%";
+
+        // Disable buttons during generation
+        selectFolderBtn.disabled = true;
+        generateBtn.disabled = true;
+        textArea.value = "Generating markdown...";
+
+        // Listen for progress updates
+        ipcRenderer.on("generation-progress", (event, progress) => {
+          progressBar.style.width = `${progress}%`;
+          progressText.textContent = `${progress}%`;
+        });
+
+        // Generate markdown
+        markdownContent = await ipcRenderer.invoke(
+          "generate-markdown",
+          folderPath,
+          selectedFiles
+        );
+
+        // Update UI
+        if (markdownContent) {
+          textArea.value = markdownContent;
+          statusText.textContent = "Markdown generated successfully!";
+          saveBtn.disabled = false;
+          copyBtn.disabled = false;
+
+          // Update stat counters
+          updateTextStats(markdownContent);
+
+          // Show success toast
+          showToast("Markdown generated successfully!");
+        } else {
+          textArea.value = "Failed to generate markdown";
+          statusText.textContent = "Error generating markdown";
+          saveBtn.disabled = true;
+          copyBtn.disabled = true;
+
+          // Show error toast
+          showToast("Error generating markdown", true);
+        }
+
+        // Re-enable buttons
+        selectFolderBtn.disabled = false;
+        generateBtn.disabled = false;
+      });
+
+      // Update text statistics (character count, token counts)
+      async function updateTextStats(text) {
+        // Update character count
+        const chars = text.length;
+        charCount.textContent = chars.toLocaleString();
+
+        // Update OpenAI token count
+        try {
+          const openAiCount = tokenCounters.countOpenAITokens(text, "gpt-4o");
+          openaiTokens.textContent =
+            openAiCount >= 0
+              ? openAiCount.toLocaleString()
+              : "Tiktoken not loaded";
+        } catch (error) {
+          console.error("Error counting OpenAI tokens:", error);
+          openaiTokens.textContent = "Error";
+        }
+
+        // Update Claude token count
+        try {
+          // Check if we have an API key
+          let claudeCount;
+          if (settings && settings.anthropicApiKey) {
+            claudeTokens.textContent = "Calculating...";
+            // Use API if key is available
+            claudeCount = await tokenCounters.countClaudeTokensWithAPI(
+              text,
+              settings.anthropicApiKey
+            );
+          } else {
+            // Otherwise use approximation
+            claudeCount = tokenCounters.countClaudeTokensApprox(text);
+          }
+
+          claudeTokens.textContent =
+            claudeCount >= 0 ? claudeCount.toLocaleString() : "Error";
+        } catch (error) {
+          console.error("Error counting Claude tokens:", error);
+          claudeTokens.textContent = "Error";
+        }
+      }
+
+      // Save markdown button
+      saveBtn.addEventListener("click", async () => {
+        if (!markdownContent) {
+          statusText.textContent = "No content to save";
+          return;
+        }
+
+        const result = await ipcRenderer.invoke(
+          "save-markdown",
+          markdownContent
+        );
+
+        if (result.success) {
+          statusText.textContent = `File saved successfully to: ${result.path}`;
+
+          // Show success toast
+          showToast(`File saved successfully!`);
+        } else {
+          statusText.textContent = `Error saving file: ${result.error}`;
+
+          // Show error toast
+          showToast(`Error saving file: ${result.error}`, true);
+        }
+      });
+
+      // Copy to clipboard button
+      copyBtn.addEventListener("click", async () => {
+        if (!markdownContent) {
+          statusText.textContent = "No content to copy";
+          return;
+        }
+
+        try {
+          // Use the Electron clipboard API
+          require("electron").clipboard.writeText(markdownContent);
+          statusText.textContent = "Markdown copied to clipboard!";
+
+          // Show success toast
+          showToast("Copied to clipboard!");
+
+          // Add highlight effect to textarea
+          textArea.classList.add("copy-highlight");
+
+          // Remove the highlight class after animation completes
+          setTimeout(() => {
+            textArea.classList.remove("copy-highlight");
+          }, 1000);
+        } catch (error) {
+          statusText.textContent = `Error copying to clipboard: ${error.message}`;
+
+          // Show error toast
+          showToast("Error copying to clipboard", true);
+        }
+      });
+
+      // Save settings button
+      saveSettingsBtn.addEventListener("click", async () => {
+        const patterns = ignorePatterns.value
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line !== "");
+
+        const anthropicApiKey = document
+          .getElementById("anthropicApiKey")
+          .value.trim();
+
+        const apiServer = apiServerEnabled.checked;
+        const apiPort = parseInt(apiServerPort.value) || 69420;
+        const mcpServer = mcpServerEnabled.checked;
+
+        const newSettings = {
+          ...settings,
+          ignorePatterns: patterns,
+          anthropicApiKey,
+          apiServerEnabled: apiServer,
+          apiServerPort: apiPort,
+          mcpServerEnabled: mcpServer,
+        };
+
+        const result = await ipcRenderer.invoke("save-settings", newSettings);
+
+        if (result.success) {
+          statusText.textContent = "Settings saved successfully";
+          settings = newSettings;
+
+          // Show success toast and highlight
+          showToast("Settings saved successfully");
+          highlightSavedSettings();
+        } else {
+          statusText.textContent = `Error saving settings: ${result.error}`;
+          showToast(`Error saving settings: ${result.error}`, true);
+        }
+      });
+
+      // Reset settings button
+      resetSettingsBtn.addEventListener("click", async () => {
+        const defaultPatterns = [
+          "node_modules",
+          ".git",
+          "dist",
+          "build",
+          ".DS_Store",
+          ".env",
+          "*.log",
+          "*.lock",
+          "package-lock.json",
+          "*.min.js",
+          "*.min.css",
+        ];
+
+        ignorePatterns.value = defaultPatterns.join("\n");
+        document.getElementById("anthropicApiKey").value = "";
+        apiServerEnabled.checked = false;
+        apiServerPort.value = "69420";
+        mcpServerEnabled.checked = false;
+
+        // Show visual feedback
+        showToast("Settings reset to defaults");
+        statusText.textContent =
+          "Settings reset to defaults. Click Save to apply changes.";
+      });
+    </script>
+  </body>
+</html>
