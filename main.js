@@ -8,21 +8,37 @@ const stat = promisify(fs.stat);
 const writeFile = promisify(fs.writeFile);
 const ApiServer = require("./api-server");
 const McpServer = require("./mcp-server");
+const RepoMixIntegration = require("./repomix-integration");
 
 let mainWindow;
 // Default ignore patterns
 const defaultIgnorePatterns = [
   "node_modules",
   ".git",
-  "dist",
-  "build",
-  ".DS_Store",
-  ".env",
-  "*.log",
-  "*.lock",
-  "package-lock.json",
-  "*.min.js",
-  "*.min.css",
+  "**/dist",
+  "**/build",
+  "**/.DS_Store",
+  "**/.env",
+  "**/*.log",
+  "**/*.lock",
+  "**/.package-lock.json",
+  "**/*.min.js",
+  "**/*.min.css",
+  "**/*.jpg",
+  "**/*.jpeg",
+  "**/*.gif",
+  "**/*.bmp",
+  "**/*.tiff",
+  "**/*.webp",
+  "**/*.ico",
+  "**/*.icns",
+  "**/*.dmg",
+  "**/*.zip",
+  "**/*.deb",
+  "**/*.rpm",
+  "**/*.msi",
+  "**/*.exe",
+  "**/*.app",
 ];
 
 // User settings with defaults
@@ -37,6 +53,7 @@ let userSettings = {
 // API server instance
 let apiServer = null;
 let mcpServer = null;
+let repoMixIntegration = null;
 
 // Markdown generator functions shared with the API server
 const markdownGeneratorFunctions = {
@@ -122,7 +139,11 @@ function stopApiServer() {
 // Start the MCP server if enabled
 function startMcpServer() {
   if (userSettings.mcpServerEnabled && !mcpServer) {
-    mcpServer = new McpServer(markdownGeneratorFunctions, userSettings);
+    mcpServer = new McpServer(
+      markdownGeneratorFunctions,
+      userSettings,
+      repoMixIntegration
+    );
     mcpServer
       .start()
       .then(() => {
@@ -175,6 +196,16 @@ function createWindow() {
 
   // Load the index.html file
   mainWindow.loadFile(path.join(__dirname, "index.html"));
+
+  // Initialize RepoMix integration
+  repoMixIntegration = new RepoMixIntegration();
+  repoMixIntegration.initialize().then((success) => {
+    if (success) {
+      console.log("RepoMix integration initialized successfully");
+    } else {
+      console.error("Failed to initialize RepoMix integration");
+    }
+  });
 
   // Open DevTools during development
   // mainWindow.webContents.openDevTools();
@@ -683,3 +714,158 @@ function sendProgress(event, progress) {
     mainWindow.webContents.send("generation-progress", progress);
   }
 }
+
+/**
+ * Calculate text statistics like token counts
+ * @param {string} text - The text to calculate stats for
+ * @returns {Promise<Object>} - Statistics object
+ */
+async function calculateStats(text) {
+  try {
+    // Import token counter module
+    const tokenCounters = require("./tokenCounters");
+
+    // Character count
+    const charCount = text.length;
+
+    // OpenAI tokens
+    let openAiTokens = 0;
+    try {
+      openAiTokens = tokenCounters.countOpenAITokens(text, "gpt-4o");
+    } catch (error) {
+      console.error("Error counting OpenAI tokens:", error);
+      openAiTokens = -1;
+    }
+
+    // Claude tokens (approximation)
+    let claudeTokens = 0;
+    try {
+      claudeTokens = tokenCounters.countClaudeTokensApprox(text);
+    } catch (error) {
+      console.error("Error counting Claude tokens:", error);
+      claudeTokens = -1;
+    }
+
+    return {
+      charCount,
+      openAiTokens,
+      claudeTokens,
+    };
+  } catch (error) {
+    console.error("Error calculating stats:", error);
+    return { charCount: 0, openAiTokens: -1, claudeTokens: -1 };
+  }
+}
+
+// IPC handlers for RepoMix integration
+ipcMain.handle("process-remote-repository", async (event, repoUrl, options) => {
+  try {
+    if (!repoMixIntegration) {
+      throw new Error("RepoMix integration not initialized");
+    }
+
+    // Update progress
+    sendProgress(event, {
+      total: 100,
+      current: 10,
+      message: "Fetching remote repository...",
+    });
+
+    // Include the user's ignore patterns in the options
+    const optionsWithIgnorePatterns = {
+      ...options,
+      ignorePatterns: userSettings.ignorePatterns,
+    };
+
+    const content = await repoMixIntegration.processRemoteRepository(
+      repoUrl,
+      optionsWithIgnorePatterns
+    );
+
+    // Update progress
+    sendProgress(event, {
+      total: 100,
+      current: 90,
+      message: "Processing complete...",
+    });
+
+    // Calculate stats
+    const stats = await calculateStats(content);
+
+    return { content, stats };
+  } catch (error) {
+    console.error("Error processing remote repository:", error);
+    throw error;
+  } finally {
+    // Complete progress
+    sendProgress(event, { total: 100, current: 100, message: "Done" });
+  }
+});
+
+ipcMain.handle(
+  "process-local-repository-with-security",
+  async (event, repoPath, options) => {
+    try {
+      if (!repoMixIntegration) {
+        throw new Error("RepoMix integration not initialized");
+      }
+
+      // Update progress
+      sendProgress(event, {
+        total: 100,
+        current: 10,
+        message: "Processing local repository with security checks...",
+      });
+
+      // Include the user's ignore patterns in the options
+      const optionsWithIgnorePatterns = {
+        ...options,
+        ignorePatterns: userSettings.ignorePatterns,
+      };
+
+      const content =
+        await repoMixIntegration.processLocalRepositoryWithSecurity(
+          repoPath,
+          optionsWithIgnorePatterns
+        );
+
+      // Update progress
+      sendProgress(event, {
+        total: 100,
+        current: 90,
+        message: "Processing complete...",
+      });
+
+      // Calculate stats
+      const stats = await calculateStats(content);
+
+      return { content, stats };
+    } catch (error) {
+      console.error("Error processing local repository with security:", error);
+      throw error;
+    } finally {
+      // Complete progress
+      sendProgress(event, { total: 100, current: 100, message: "Done" });
+    }
+  }
+);
+
+ipcMain.handle(
+  "count-tokens-with-repomix",
+  async (event, content, encoding) => {
+    try {
+      if (!repoMixIntegration) {
+        throw new Error("RepoMix integration not initialized");
+      }
+
+      const tokenCount = await repoMixIntegration.getTokenCount(
+        content,
+        encoding
+      );
+      return tokenCount;
+    } catch (error) {
+      console.error("Error counting tokens with RepoMix:", error);
+      throw error;
+    }
+  }
+);

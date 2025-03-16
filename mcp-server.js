@@ -11,9 +11,10 @@ const tokenCounters = require("./tokenCounters");
  * https://modelcontextprotocol.io/
  */
 class McpServer {
-  constructor(markdownGeneratorFunctions, settings) {
+  constructor(markdownGeneratorFunctions, settings, repoMixIntegration) {
     this.markdownGeneratorFunctions = markdownGeneratorFunctions;
     this.settings = settings;
+    this.repoMixIntegration = repoMixIntegration;
     this.child = null;
     this.messageBuffer = "";
     this.nextId = 1;
@@ -166,6 +167,54 @@ class McpServer {
         },
       },
       {
+        name: "pack_remote_repository",
+        description:
+          "Process a remote Git repository and generate markdown documentation",
+        inputSchema: {
+          type: "object",
+          properties: {
+            repoUrl: {
+              type: "string",
+              description:
+                "URL of the repository to process (e.g., 'owner/repo' or full URL)",
+            },
+            securityCheck: {
+              type: "boolean",
+              description:
+                "Whether to perform security checks (default: false)",
+            },
+            style: {
+              type: "string",
+              description:
+                "Output style: 'markdown', 'plain', or 'xml' (default: 'markdown')",
+              enum: ["markdown", "plain", "xml"],
+            },
+          },
+          required: ["repoUrl"],
+        },
+      },
+      {
+        name: "process_with_security",
+        description:
+          "Process a local repository with security checks to identify and filter sensitive information",
+        inputSchema: {
+          type: "object",
+          properties: {
+            folderPath: {
+              type: "string",
+              description: "Path to the folder containing source code",
+            },
+            style: {
+              type: "string",
+              description:
+                "Output style: 'markdown', 'plain', or 'xml' (default: 'markdown')",
+              enum: ["markdown", "plain", "xml"],
+            },
+          },
+          required: ["folderPath"],
+        },
+      },
+      {
         name: "count_tokens",
         description: "Counts tokens in a text string using various tokenizers",
         inputSchema: {
@@ -228,30 +277,33 @@ class McpServer {
         case "generate_markdown":
           result = await this.handleGenerateMarkdown(input);
           break;
-
+        case "pack_remote_repository":
+          result = await this.handlePackRemoteRepository(input);
+          break;
+        case "process_with_security":
+          result = await this.handleProcessWithSecurity(input);
+          break;
         case "count_tokens":
           result = await this.handleCountTokens(input);
           break;
-
         case "get_directory_structure":
           result = await this.handleGetDirectoryStructure(input);
           break;
-
         default:
           return this.sendErrorResponse(
             message.id,
-            -32602,
+            -32601,
             `Unknown tool: ${name}`
           );
       }
 
       this.sendResult(message.id, { result });
     } catch (error) {
-      console.error(`Error calling tool ${name}:`, error);
+      console.error(`Error handling tool call ${name}:`, error);
       this.sendErrorResponse(
         message.id,
-        -32000,
-        `Error calling tool ${name}: ${error.message}`
+        -32603,
+        `Error handling tool call: ${error.message}`
       );
     }
   }
@@ -475,6 +527,73 @@ class McpServer {
       openAiTokens,
       claudeTokens,
     };
+  }
+
+  /**
+   * Handle the pack_remote_repository tool
+   */
+  async handlePackRemoteRepository(input) {
+    if (!this.repoMixIntegration) {
+      throw new Error("RepoMix integration not initialized");
+    }
+
+    const { repoUrl, securityCheck = false, style = "markdown" } = input;
+
+    if (!repoUrl) {
+      throw new Error("Missing repoUrl parameter");
+    }
+
+    console.log(`Processing remote repository: ${repoUrl}`);
+
+    try {
+      const content = await this.repoMixIntegration.processRemoteRepository(
+        repoUrl,
+        { securityCheck, style }
+      );
+
+      const stats = await this.calculateStats(content);
+
+      return {
+        content,
+        stats,
+      };
+    } catch (error) {
+      throw new Error(`Error processing remote repository: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle the process_with_security tool
+   */
+  async handleProcessWithSecurity(input) {
+    if (!this.repoMixIntegration) {
+      throw new Error("RepoMix integration not initialized");
+    }
+
+    const { folderPath, style = "markdown" } = input;
+
+    if (!folderPath) {
+      throw new Error("Missing folderPath parameter");
+    }
+
+    console.log(`Processing folder with security checks: ${folderPath}`);
+
+    try {
+      const content =
+        await this.repoMixIntegration.processLocalRepositoryWithSecurity(
+          folderPath,
+          { style }
+        );
+
+      const stats = await this.calculateStats(content);
+
+      return {
+        content,
+        stats,
+      };
+    } catch (error) {
+      throw new Error(`Error processing with security: ${error.message}`);
+    }
   }
 
   /**

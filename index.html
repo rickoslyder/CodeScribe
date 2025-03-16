@@ -289,6 +289,7 @@
 
     <div class="tab-container">
       <div class="tab active" data-tab="generator">Generator</div>
+      <div class="tab" data-tab="repomix">Repository</div>
       <div class="tab" data-tab="settings">Settings</div>
     </div>
 
@@ -332,6 +333,77 @@
         </div>
 
         <div class="status" id="statusText"></div>
+      </div>
+
+      <!-- RepoMix Tab Content -->
+      <div class="content" id="repomixContent" style="display: none">
+        <div class="button-container">
+          <button id="processRemoteRepoBtn">Process Remote Repository</button>
+          <button id="processLocalRepoBtn">Process Local Repository</button>
+          <button id="securityCheckBtn">Security Check</button>
+          <button id="saveRepoMixBtn" disabled>Save Markdown</button>
+          <button id="copyRepoMixBtn" disabled>Copy to Clipboard</button>
+        </div>
+
+        <div
+          class="repo-input-container"
+          style="padding: 10px 20px; display: flex; align-items: center"
+        >
+          <input
+            type="text"
+            id="repoUrlInput"
+            placeholder="Enter GitHub repository URL (e.g., owner/repo)"
+            style="flex: 1; padding: 8px; margin-right: 10px"
+          />
+          <label style="margin-right: 10px">
+            <input type="checkbox" id="securityCheckOption" /> Security Check
+          </label>
+          <select id="outputStyleSelect" style="padding: 8px">
+            <option value="markdown">Markdown</option>
+            <option value="plain">Plain Text</option>
+            <option value="xml">XML</option>
+          </select>
+        </div>
+
+        <div class="progress-container" id="repoMixProgressContainer">
+          <div class="progress">
+            <div class="progress-bar" id="repoMixProgressBar"></div>
+          </div>
+          <div class="progress-text" id="repoMixProgressText">0%</div>
+        </div>
+
+        <textarea
+          id="repoMixTextArea"
+          readonly
+          style="
+            flex: 1;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            border: none;
+            resize: none;
+            background-color: white;
+            overflow: auto;
+          "
+        ></textarea>
+
+        <div class="stats-container">
+          <div class="stats-grid">
+            <div class="stats-item">
+              <div class="stats-title">Characters</div>
+              <div id="repoMixCharCount">0</div>
+            </div>
+            <div class="stats-item">
+              <div class="stats-title">OpenAI Tokens (GPT-4o)</div>
+              <div id="repoMixOpenaiTokens">0</div>
+            </div>
+            <div class="stats-item">
+              <div class="stats-title">Claude Tokens</div>
+              <div id="repoMixClaudeTokens">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="status" id="repoMixStatusText"></div>
       </div>
 
       <!-- Settings Tab Content -->
@@ -465,6 +537,7 @@
       // Tab elements
       const tabs = document.querySelectorAll(".tab");
       const generatorContent = document.getElementById("generatorContent");
+      const repomixContent = document.getElementById("repomixContent");
       const settingsContent = document.getElementById("settingsContent");
 
       let folderPath = "";
@@ -601,6 +674,7 @@
           // Hide all content
           generatorContent.style.display = "none";
           settingsContent.style.display = "none";
+          repomixContent.style.display = "none";
 
           // Show content based on tab
           const tabId = tab.getAttribute("data-tab");
@@ -608,6 +682,8 @@
             generatorContent.style.display = "flex";
           } else if (tabId === "settings") {
             settingsContent.style.display = "block";
+          } else if (tabId === "repomix") {
+            repomixContent.style.display = "flex";
           }
         });
       });
@@ -615,6 +691,7 @@
       // Initialize tabs
       generatorContent.style.display = "flex";
       settingsContent.style.display = "none";
+      repomixContent.style.display = "none";
 
       // Toggle file tree
       toggleFileTreeBtn.addEventListener("click", () => {
@@ -983,6 +1060,348 @@
         statusText.textContent =
           "Settings reset to defaults. Click Save to apply changes.";
       });
+
+      // RepoMix Tab Functionality
+      const processRemoteRepoBtn = document.getElementById(
+        "processRemoteRepoBtn"
+      );
+      const processLocalRepoBtn = document.getElementById(
+        "processLocalRepoBtn"
+      );
+      const securityCheckBtn = document.getElementById("securityCheckBtn");
+      const saveRepoMixBtn = document.getElementById("saveRepoMixBtn");
+      const copyRepoMixBtn = document.getElementById("copyRepoMixBtn");
+      const repoUrlInput = document.getElementById("repoUrlInput");
+      const securityCheckOption = document.getElementById(
+        "securityCheckOption"
+      );
+      const outputStyleSelect = document.getElementById("outputStyleSelect");
+      const repoMixTextArea = document.getElementById("repoMixTextArea");
+      const repoMixProgressContainer = document.getElementById(
+        "repoMixProgressContainer"
+      );
+      const repoMixProgressBar = document.getElementById("repoMixProgressBar");
+      const repoMixProgressText = document.getElementById(
+        "repoMixProgressText"
+      );
+      const repoMixStatusText = document.getElementById("repoMixStatusText");
+      const repoMixCharCount = document.getElementById("repoMixCharCount");
+      const repoMixOpenaiTokens = document.getElementById(
+        "repoMixOpenaiTokens"
+      );
+      const repoMixClaudeTokens = document.getElementById(
+        "repoMixClaudeTokens"
+      );
+
+      let repoMixContent = null;
+
+      // Process Remote Repository
+      processRemoteRepoBtn.addEventListener("click", async () => {
+        const repoUrl = repoUrlInput.value.trim();
+        if (!repoUrl) {
+          repoMixStatusText.textContent = "Please enter a repository URL";
+          showToast("Please enter a repository URL", true);
+          return;
+        }
+
+        try {
+          // Show progress
+          repoMixProgressContainer.style.display = "block";
+          repoMixProgressBar.style.width = "10%";
+          repoMixProgressText.textContent = "10% - Fetching repository...";
+          repoMixStatusText.textContent = "Processing remote repository...";
+
+          // Disable buttons during processing
+          processRemoteRepoBtn.disabled = true;
+          processLocalRepoBtn.disabled = true;
+          securityCheckBtn.disabled = true;
+
+          // Get options
+          const options = {
+            securityCheck: securityCheckOption.checked,
+            style: outputStyleSelect.value,
+          };
+
+          // Call main process to process the repository
+          const result = await ipcRenderer.invoke(
+            "process-remote-repository",
+            repoUrl,
+            options
+          );
+
+          // Update UI with result
+          repoMixContent = result.content;
+          repoMixTextArea.value = result.content;
+
+          // Update stats
+          updateRepoMixStats(result.content, result.stats);
+
+          // Enable save and copy buttons
+          saveRepoMixBtn.disabled = false;
+          copyRepoMixBtn.disabled = false;
+
+          // Update status
+          repoMixStatusText.textContent = "Repository processed successfully";
+          showToast("Repository processed successfully");
+
+          // Complete progress
+          repoMixProgressBar.style.width = "100%";
+          repoMixProgressText.textContent = "100% - Complete";
+        } catch (error) {
+          repoMixStatusText.textContent = `Error processing repository: ${error.message}`;
+          showToast(`Error: ${error.message}`, true);
+
+          // Reset progress
+          repoMixProgressBar.style.width = "0%";
+          repoMixProgressText.textContent = "Error";
+        } finally {
+          // Re-enable buttons
+          processRemoteRepoBtn.disabled = false;
+          processLocalRepoBtn.disabled = false;
+          securityCheckBtn.disabled = false;
+        }
+      });
+
+      // Process Local Repository with Security Check
+      processLocalRepoBtn.addEventListener("click", async () => {
+        try {
+          // Select folder
+          const folderPath = await ipcRenderer.invoke("select-folder");
+          if (!folderPath) {
+            return; // User cancelled
+          }
+
+          // Show progress
+          repoMixProgressContainer.style.display = "block";
+          repoMixProgressBar.style.width = "10%";
+          repoMixProgressText.textContent = "10% - Processing repository...";
+          repoMixStatusText.textContent = "Processing local repository...";
+
+          // Disable buttons during processing
+          processRemoteRepoBtn.disabled = true;
+          processLocalRepoBtn.disabled = true;
+          securityCheckBtn.disabled = true;
+
+          // Get options
+          const options = {
+            style: outputStyleSelect.value,
+          };
+
+          // Call main process to process the repository
+          const result = await ipcRenderer.invoke(
+            "process-local-repository-with-security",
+            folderPath,
+            options
+          );
+
+          // Update UI with result
+          repoMixContent = result.content;
+          repoMixTextArea.value = result.content;
+
+          // Update stats
+          updateRepoMixStats(result.content, result.stats);
+
+          // Enable save and copy buttons
+          saveRepoMixBtn.disabled = false;
+          copyRepoMixBtn.disabled = false;
+
+          // Update status
+          repoMixStatusText.textContent = "Repository processed successfully";
+          showToast("Repository processed successfully");
+
+          // Complete progress
+          repoMixProgressBar.style.width = "100%";
+          repoMixProgressText.textContent = "100% - Complete";
+        } catch (error) {
+          repoMixStatusText.textContent = `Error processing repository: ${error.message}`;
+          showToast(`Error: ${error.message}`, true);
+
+          // Reset progress
+          repoMixProgressBar.style.width = "0%";
+          repoMixProgressText.textContent = "Error";
+        } finally {
+          // Re-enable buttons
+          processRemoteRepoBtn.disabled = false;
+          processLocalRepoBtn.disabled = false;
+          securityCheckBtn.disabled = false;
+        }
+      });
+
+      // Security Check Button
+      securityCheckBtn.addEventListener("click", async () => {
+        try {
+          // Select folder
+          const folderPath = await ipcRenderer.invoke("select-folder");
+          if (!folderPath) {
+            return; // User cancelled
+          }
+
+          // Show progress
+          repoMixProgressContainer.style.display = "block";
+          repoMixProgressBar.style.width = "10%";
+          repoMixProgressText.textContent = "10% - Running security checks...";
+          repoMixStatusText.textContent = "Running security checks...";
+
+          // Disable buttons during processing
+          processRemoteRepoBtn.disabled = true;
+          processLocalRepoBtn.disabled = true;
+          securityCheckBtn.disabled = true;
+
+          // Force security check option
+          const options = {
+            style: outputStyleSelect.value,
+            securityCheck: true,
+          };
+
+          // Call main process to process the repository
+          const result = await ipcRenderer.invoke(
+            "process-local-repository-with-security",
+            folderPath,
+            options
+          );
+
+          // Update UI with result
+          repoMixContent = result.content;
+          repoMixTextArea.value = result.content;
+
+          // Update stats
+          updateRepoMixStats(result.content, result.stats);
+
+          // Enable save and copy buttons
+          saveRepoMixBtn.disabled = false;
+          copyRepoMixBtn.disabled = false;
+
+          // Update status
+          repoMixStatusText.textContent = "Security check completed";
+          showToast("Security check completed");
+
+          // Complete progress
+          repoMixProgressBar.style.width = "100%";
+          repoMixProgressText.textContent = "100% - Complete";
+        } catch (error) {
+          repoMixStatusText.textContent = `Error running security check: ${error.message}`;
+          showToast(`Error: ${error.message}`, true);
+
+          // Reset progress
+          repoMixProgressBar.style.width = "0%";
+          repoMixProgressText.textContent = "Error";
+        } finally {
+          // Re-enable buttons
+          processRemoteRepoBtn.disabled = false;
+          processLocalRepoBtn.disabled = false;
+          securityCheckBtn.disabled = false;
+        }
+      });
+
+      // Save RepoMix content
+      saveRepoMixBtn.addEventListener("click", async () => {
+        if (!repoMixContent) {
+          repoMixStatusText.textContent = "No content to save";
+          return;
+        }
+
+        const result = await ipcRenderer.invoke(
+          "save-markdown",
+          repoMixContent
+        );
+
+        if (result.success) {
+          repoMixStatusText.textContent = `File saved successfully to: ${result.path}`;
+          showToast("File saved successfully");
+        } else {
+          repoMixStatusText.textContent = `Error saving file: ${result.error}`;
+          showToast(`Error saving file: ${result.error}`, true);
+        }
+      });
+
+      // Copy RepoMix content to clipboard
+      copyRepoMixBtn.addEventListener("click", async () => {
+        if (!repoMixContent) {
+          repoMixStatusText.textContent = "No content to copy";
+          return;
+        }
+
+        try {
+          await navigator.clipboard.writeText(repoMixContent);
+          repoMixStatusText.textContent = "Content copied to clipboard";
+          showToast("Content copied to clipboard");
+
+          // Add visual feedback
+          repoMixTextArea.classList.add("copy-highlight");
+
+          // Remove the highlight class after animation completes
+          setTimeout(() => {
+            repoMixTextArea.classList.remove("copy-highlight");
+          }, 1000);
+        } catch (error) {
+          repoMixStatusText.textContent = `Error copying to clipboard: ${error.message}`;
+          showToast("Error copying to clipboard", true);
+        }
+      });
+
+      // Update RepoMix stats
+      async function updateRepoMixStats(text, stats) {
+        if (!text) {
+          repoMixCharCount.textContent = "0";
+          repoMixOpenaiTokens.textContent = "0";
+          repoMixClaudeTokens.textContent = "0";
+          return;
+        }
+
+        // Update character count
+        repoMixCharCount.textContent = text.length.toLocaleString();
+
+        // If stats are provided, use them
+        if (stats) {
+          repoMixOpenaiTokens.textContent =
+            stats.openAiTokens >= 0
+              ? stats.openAiTokens.toLocaleString()
+              : "Error";
+
+          repoMixClaudeTokens.textContent =
+            stats.claudeTokens >= 0
+              ? stats.claudeTokens.toLocaleString()
+              : "Error";
+
+          return;
+        }
+
+        // Otherwise calculate them
+        // Update OpenAI token count
+        try {
+          const openAiCount = tokenCounters.countOpenAITokens(text, "gpt-4o");
+          repoMixOpenaiTokens.textContent =
+            openAiCount >= 0
+              ? openAiCount.toLocaleString()
+              : "Tiktoken not loaded";
+        } catch (error) {
+          console.error("Error counting OpenAI tokens:", error);
+          repoMixOpenaiTokens.textContent = "Error";
+        }
+
+        // Update Claude token count
+        try {
+          // Check if we have an API key
+          let claudeCount;
+          if (settings && settings.anthropicApiKey) {
+            repoMixClaudeTokens.textContent = "Calculating...";
+            // Use API if key is available
+            claudeCount = await tokenCounters.countClaudeTokensWithAPI(
+              text,
+              settings.anthropicApiKey
+            );
+          } else {
+            // Otherwise use approximation
+            claudeCount = tokenCounters.countClaudeTokensApprox(text);
+          }
+
+          repoMixClaudeTokens.textContent =
+            claudeCount >= 0 ? claudeCount.toLocaleString() : "Error";
+        } catch (error) {
+          console.error("Error counting Claude tokens:", error);
+          repoMixClaudeTokens.textContent = "Error";
+        }
+      }
     </script>
   </body>
 </html>

@@ -8,6 +8,9 @@ An elegant application to generate markdown documentation from your code files.
 - Generate a markdown document containing all file contents with syntax highlighting
 - View the generated markdown directly in the app
 - Save the markdown to a file on your computer
+- Process entire remote repositories directly from GitHub URLs
+- Security scanning to detect and filter sensitive information
+- Advanced token counting for AI models (GPT-4o, Claude)
 - REST API server for remote access to documentation generation functionality
 - Model Context Protocol (MCP) server for AI assistants integration
 
@@ -134,9 +137,15 @@ The MCP server provides the following functionality to AI assistants:
 - Directory structure retrieval
 - Documentation generation from specified files
 - Settings management
+- Repository processing with security checks
+- Remote repository fetching and analysis
 
 MCP is an open protocol developed by Anthropic, designed to allow AI assistants to interact with external tools and services.
 
 ## License
 
 ISC 
+
+## Acknowledgments
+
+CodeScribe's repository processing capabilities are powered in part by [RepoMix](https://github.com/yamadashy/repomix), an open-source tool for packaging repositories.
